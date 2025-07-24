@@ -12,6 +12,7 @@ import {
   type CourseEnrollment,
   type InsertCourseEnrollment
 } from "@shared/schema";
+import { db, COLLECTIONS } from "./firebase";
 
 // modify the interface with any CRUD methods
 // you might need
@@ -114,4 +115,155 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+export class FirebaseStorage implements IStorage {
+  async getUser(id: number): Promise<User | undefined> {
+    try {
+      const userRef = db.collection(COLLECTIONS.USERS).doc(id.toString());
+      const doc = await userRef.get();
+      if (doc.exists) {
+        return { id, ...doc.data() } as User;
+      }
+      return undefined;
+    } catch (error) {
+      console.error('Error getting user:', error);
+      return undefined;
+    }
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    try {
+      const usersRef = db.collection(COLLECTIONS.USERS);
+      const snapshot = await usersRef.where('username', '==', username).limit(1).get();
+      if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        return { id: parseInt(doc.id), ...doc.data() } as User;
+      }
+      return undefined;
+    } catch (error) {
+      console.error('Error getting user by username:', error);
+      return undefined;
+    }
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    try {
+      const userRef = await db.collection(COLLECTIONS.USERS).add(insertUser);
+      const id = parseInt(userRef.id);
+      return { id, ...insertUser };
+    } catch (error) {
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  }
+
+  async createContactSubmission(insertSubmission: InsertContactSubmission): Promise<ContactSubmission> {
+    try {
+      const submissionData = {
+        ...insertSubmission,
+        createdAt: new Date()
+      };
+      const docRef = await db.collection(COLLECTIONS.CONTACTS).add(submissionData);
+      return { 
+        id: parseInt(docRef.id) || Date.now(), // Fallback ID if parsing fails
+        ...submissionData 
+      };
+    } catch (error) {
+      console.error('Error creating contact submission:', error);
+      throw error;
+    }
+  }
+
+  async createNewsletterSubscription(insertSubscription: InsertNewsletterSubscription): Promise<NewsletterSubscription> {
+    try {
+      // Check if email already exists
+      const existingQuery = await db.collection(COLLECTIONS.NEWSLETTER)
+        .where('email', '==', insertSubscription.email)
+        .limit(1)
+        .get();
+      
+      if (!existingQuery.empty) {
+        throw new Error("Email already subscribed");
+      }
+
+      const subscriptionData = {
+        ...insertSubscription,
+        createdAt: new Date()
+      };
+      const docRef = await db.collection(COLLECTIONS.NEWSLETTER).add(subscriptionData);
+      return { 
+        id: parseInt(docRef.id) || Date.now(),
+        ...subscriptionData 
+      };
+    } catch (error) {
+      console.error('Error creating newsletter subscription:', error);
+      throw error;
+    }
+  }
+
+  async createCourseEnrollment(insertEnrollment: InsertCourseEnrollment): Promise<CourseEnrollment> {
+    try {
+      const enrollmentData = {
+        ...insertEnrollment,
+        createdAt: new Date()
+      };
+      const docRef = await db.collection(COLLECTIONS.ENROLLMENTS).add(enrollmentData);
+      return { 
+        id: parseInt(docRef.id) || Date.now(),
+        ...enrollmentData 
+      };
+    } catch (error) {
+      console.error('Error creating course enrollment:', error);
+      throw error;
+    }
+  }
+
+  async getAllContactSubmissions(): Promise<ContactSubmission[]> {
+    try {
+      const snapshot = await db.collection(COLLECTIONS.CONTACTS)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({
+        id: parseInt(doc.id) || Date.now(),
+        ...doc.data()
+      })) as ContactSubmission[];
+    } catch (error) {
+      console.error('Error getting contact submissions:', error);
+      return [];
+    }
+  }
+
+  async getAllNewsletterSubscriptions(): Promise<NewsletterSubscription[]> {
+    try {
+      const snapshot = await db.collection(COLLECTIONS.NEWSLETTER)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({
+        id: parseInt(doc.id) || Date.now(),
+        ...doc.data()
+      })) as NewsletterSubscription[];
+    } catch (error) {
+      console.error('Error getting newsletter subscriptions:', error);
+      return [];
+    }
+  }
+
+  async getAllCourseEnrollments(): Promise<CourseEnrollment[]> {
+    try {
+      const snapshot = await db.collection(COLLECTIONS.ENROLLMENTS)
+        .orderBy('createdAt', 'desc')
+        .get();
+      return snapshot.docs.map(doc => ({
+        id: parseInt(doc.id) || Date.now(),
+        ...doc.data()
+      })) as CourseEnrollment[];
+    } catch (error) {
+      console.error('Error getting course enrollments:', error);
+      return [];
+    }
+  }
+}
+
+// Use Firebase storage in production, Memory storage for development without Firebase
+export const storage = process.env.NODE_ENV === 'production' || process.env.USE_FIREBASE 
+  ? new FirebaseStorage() 
+  : new MemStorage();

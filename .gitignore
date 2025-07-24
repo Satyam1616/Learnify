@@ -8,3 +8,12 @@ vite.config.ts.*
 
 # Local Netlify folder
 .netlify
+
+# Firebase service account files (NEVER commit these!)
+server/firebase-service-account.json
+**/firebase-service-account.json
+
+# Environment variables
+.env
+.env.local
+.env.production
